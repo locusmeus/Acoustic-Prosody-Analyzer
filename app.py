@@ -939,7 +939,7 @@ if uploaded_file is not None:
                         range=[crop_start, crop_end],
                         tickmode="linear",
                         tick0=0,
-                        dtick=0.05,,
+                        dtick=0.05,
                         tickformat=".2f",
                         tickangle=-45,
                         automargin=True,
