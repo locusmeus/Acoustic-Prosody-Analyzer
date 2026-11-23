@@ -1,5 +1,7 @@
 import os
 import tempfile
+import io
+import wave
 
 import numpy as np
 import pandas as pd
@@ -15,7 +17,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("Acoustic Analyzer")
+st.title("Acoustic Prosody Analyzer")
 st.write("2026 영어음성학 4조 ㅣ 김예은, 최재현, 길민서, 김석준, 피이엔")
 st.write("Upload a WAV file to compare F0, Intensity, and Duration.")
 
@@ -278,25 +280,101 @@ if uploaded_file is not None:
         if end_key not in st.session_state:
             st.session_state[end_key] = float(duration)
 
-        # 2. 파형 그래프 생성
+        
+        # =====================================
+        # STEP 18. Select Audio Spectrogram
+        # =====================================
+
+        # 1. Praat / Parselmouth로 Spectrogram 생성
+        max_frequency = min(
+            5000.0,
+            sample_rate * 0.45
+        )
+
+        spectrogram = sound.to_spectrogram(
+            window_length=0.005,
+            maximum_frequency=max_frequency,
+            time_step=0.01,
+            frequency_step=25.0
+        )
+
+        # 2. 시간, 주파수, 에너지 데이터 추출
+        spec_times = spectrogram.xs()
+        spec_freqs = spectrogram.ys()
+        spec_power = spectrogram.values
+
+        # 3. Power를 dB로 변환
+        spec_db = 10 * np.log10(
+            np.maximum(spec_power, 1e-12)
+        )
+
+        # 화면 표시를 위한 상대 dB
+        spec_db = spec_db - np.max(spec_db)
+        spec_db = np.maximum(spec_db, -60)
+
+        # 4. Spectrogram 그래프 생성
         fig_select = go.Figure()
 
-        # 선택 그래프는 최대 약 3000개 포인트로 표시
-        select_step = max(1, len(samples) // 3000)
-
         fig_select.add_trace(
-            go.Scatter(
-                x=times[::select_step],
-                y=samples[::select_step],
-                mode="lines",
-                name="Waveform",
-                line=dict(color="teal", width=1)
+            go.Heatmap(
+                x=spec_times,
+                y=spec_freqs,
+                z=spec_db,
+                colorscale="Greys",
+                reversescale=False,
+                zmin=-60,
+                zmax=0,
+                colorbar=dict(
+                    title="Relative dB"
+                ),
+                name="Spectrogram"
             )
         )
 
-        # 현재 선택한 시간을 파형에 표시
-        current_start = float(st.session_state[start_key])
-        current_end = float(st.session_state[end_key])
+        # 5. 드래그 선택을 지원할 투명 Scatter
+        selector_times = spec_times[
+            ::max(1, len(spec_times) // 350)
+        ]
+
+        selector_freqs = np.linspace(
+            0,
+            max_frequency,
+            30
+        )
+
+        selector_x = np.tile(
+            selector_times,
+            len(selector_freqs)
+        )
+
+        selector_y = np.repeat(
+            selector_freqs,
+            len(selector_times)
+        )
+
+        fig_select.add_trace(
+            go.Scattergl(
+                x=selector_x,
+                y=selector_y,
+                mode="markers",
+                marker=dict(
+                    size=8,
+                    color="rgba(255,255,255,0.01)"
+                ),
+                hoverinfo="skip",
+                showlegend=False,
+                name="Selection Layer"
+            )
+        )
+
+        # 6. 현재 선택한 시간 범위 표시
+        current_start = float(
+            st.session_state[start_key]
+        )
+
+        current_end = float(
+            st.session_state[end_key]
+        )
 
         if current_end > current_start:
             fig_select.add_vrect(
@@ -305,19 +383,21 @@ if uploaded_file is not None:
                 fillcolor="orange",
                 opacity=0.15,
                 line_width=0,
-                layer="below"
+                layer="above"
             )
 
+        # 7. 그래프 설정
         fig_select.update_layout(
-            title="Select Audio Region",
+            title="Select Audio Region - Spectrogram",
             xaxis_title="Time (seconds)",
-            yaxis_title="Amplitude",
-            height=400,
+            yaxis_title="Frequency (Hz)",
+            yaxis_range=[0, max_frequency],
+            height=450,
             dragmode="select",
             selectdirection="h"
         )
 
-        # 3. 파형 선택 이벤트 받기
+        # 8. 드래그 선택 이벤트
         waveform_event = st.plotly_chart(
             fig_select,
             width="stretch",
@@ -325,6 +405,7 @@ if uploaded_file is not None:
             on_select="rerun",
             selection_mode="box"
         )
+
 
         # 4. 드래그한 시간 범위 추출
         selected_times = []
@@ -523,7 +604,7 @@ if uploaded_file is not None:
         # STEP 16. Selected Region Split Analysis
         # =====================================
 
-        st.subheader("Selected Region Waveform")
+        st.subheader("Selected Region Spectrogram")
 
         # 1. 선택된 구간 가져오기
         crop_start = float(st.session_state[start_key])
@@ -575,44 +656,81 @@ if uploaded_file is not None:
                     f"Split Time: {split_time:.3f}s"
                 )
 
-                # 4. 확대 파형 생성
-                crop_step = max(
-                    1, len(cropped_samples) // 5000
+                
+                # =====================================
+                # STEP 18. Zoomed Spectrogram
+                # =====================================
+
+                # 1. 선택 시간 범위의 Spectrogram 데이터
+                crop_spec_mask = (
+                    (spec_times >= crop_start)
+                    & (spec_times <= crop_end)
                 )
 
-                fig_crop = go.Figure()
+                if np.any(crop_spec_mask):
 
-                fig_crop.add_trace(
-                    go.Scatter(
-                        x=cropped_times[::crop_step],
-                        y=cropped_samples[::crop_step],
-                        mode="lines",
-                        name="Selected Waveform",
-                        line=dict(color="teal", width=1)
+                    cropped_spec_times = spec_times[
+                        crop_spec_mask
+                    ]
+
+                    cropped_spec_db = spec_db[
+                        :, crop_spec_mask
+                    ]
+
+                    # 2. 확대 Spectrogram 생성
+                    fig_crop = go.Figure()
+
+                    fig_crop.add_trace(
+                        go.Heatmap(
+                            x=cropped_spec_times,
+                            y=spec_freqs,
+                            z=cropped_spec_db,
+                            colorscale="Greys",
+                            reversescale=False,
+                            zmin=-60,
+                            zmax=0,
+                            colorbar=dict(
+                                title="Relative dB"
+                            )
+                        )
                     )
-                )
 
-                # 5. 분할 위치 표시
-                fig_crop.add_vline(
-                    x=split_time,
-                    line_color="orange",
-                    line_width=2,
-                    line_dash="dash"
-                )
+                    # 3. 분할 위치 표시
+                    fig_crop.add_vline(
+                        x=split_time,
+                        line_color="orange",
+                        line_width=2,
+                        line_dash="dash"
+                    )
 
-                fig_crop.update_layout(
-                    title="Zoomed Waveform with Split",
-                    xaxis_title="Time (seconds)",
-                    yaxis_title="Amplitude",
-                    xaxis_range=[crop_start, crop_end],
-                    height=350
-                )
+                    # 4. 확대 범위 지정
+                    fig_crop.update_layout(
+                        title="Zoomed Spectrogram with Split",
+                        xaxis_title="Time (seconds)",
+                        yaxis_title="Frequency (Hz)",
+                        xaxis_range=[
+                            crop_start,
+                            crop_end
+                        ],
+                        yaxis_range=[
+                            0,
+                            max_frequency
+                        ],
+                        height=400
+                    )
 
-                st.plotly_chart(
-                    fig_crop,
-                    width="stretch",
-                    key=f"cropped_waveform_{file_id}"
-                )
+                    # 5. 확대 그래프 출력
+                    st.plotly_chart(
+                        fig_crop,
+                        width="stretch",
+                        key=f"cropped_spectrogram_{file_id}"
+                    )
+
+                else:
+                    st.warning(
+                        "선택 구간에 표시할 "
+                        "Spectrogram 데이터가 없습니다."
+                    )
 
                 # =====================================
                 # STEP 17-2. Split Segment Audio Playback
@@ -677,88 +795,409 @@ if uploaded_file is not None:
                                 "재생할 오디오 샘플이 없습니다."
                             )
 
-                # 6. 두 구간 정의
-                split_regions = [
-                    ("Segment 1", crop_start, split_time),
-                    ("Segment 2", split_time, crop_end)
+                # =====================================
+                # STEP 19. Manual Segment Selection
+                # =====================================
+
+                st.subheader("Selected Region")
+
+                st.write(
+                    "스펙트로그램에서 두 음절 구간을 "
+                    "순서대로 드래그하여 저장하세요."
+                )
+
+                # 1. 선택 구간별로 별도의 상태 관리
+                region_id = (
+                    f"{file_id}_"
+                    f"{int(round(crop_start * 1000))}_"
+                    f"{int(round(crop_end * 1000))}"
+                )
+
+                segments_key = f"manual_segments_{region_id}"
+                version_key = f"manual_chart_version_{region_id}"
+
+                if segments_key not in st.session_state:
+                    st.session_state[segments_key] = {}
+
+                if version_key not in st.session_state:
+                    st.session_state[version_key] = 0
+
+                saved_segments = st.session_state[segments_key]
+
+                # 2. 선택용 Spectrogram
+                fig_manual = go.Figure()
+
+                fig_manual.add_trace(
+                    go.Heatmap(
+                        x=cropped_spec_times,
+                        y=spec_freqs,
+                        z=cropped_spec_db,
+                        colorscale="Greys",
+                        reversescale=False,
+                        zmin=-60,
+                        zmax=0,
+                        colorbar=dict(title="Relative dB")
+                    )
+                )
+
+                # 드래그 선택을 위한 Scatter 포인트
+                selection_times = cropped_spec_times[
+                    ::max(1, len(cropped_spec_times) // 400)
                 ]
 
-                split_results = []
-
-                # 7. 각 구간별 분석
-                for name, seg_start, seg_end in split_regions:
-
-                    seg_duration = (
-                        seg_end - seg_start
-                    ) * 1000
-
-                    # F0 계산
-                    seg_f0_mask = (
-                        (pitch_times >= seg_start)
-                        & (pitch_times < seg_end)
-                        & np.isfinite(pitch_values)
-                        & (pitch_values > 0)
-                    )
-
-                    seg_f0_values = pitch_values[
-                        seg_f0_mask
-                    ]
-
-                    seg_mean_f0 = (
-                        float(np.mean(seg_f0_values))
-                        if len(seg_f0_values) > 0
-                        else np.nan
-                    )
-
-                    # Intensity 계산
-                    seg_db_mask = (
-                        (intensity_times >= seg_start)
-                        & (intensity_times < seg_end)
-                        & np.isfinite(intensity_values)
-                    )
-
-                    seg_db_values = intensity_values[
-                        seg_db_mask
-                    ]
-
-                    seg_mean_db = (
-                        float(np.mean(seg_db_values))
-                        if len(seg_db_values) > 0
-                        else np.nan
-                    )
-
-                    split_results.append({
-                        "Segment": name,
-                        "Start (s)": seg_start,
-                        "End (s)": seg_end,
-                        "Duration (ms)": seg_duration,
-                        "Mean F0 (Hz)": seg_mean_f0,
-                        "Mean Intensity (dB)": seg_mean_db
-                    })
-
-                # 8. 분석 결과 출력
-                split_df = pd.DataFrame(split_results)
-
-                st.subheader("Split Segment Results")
-
-                st.dataframe(
-                    split_df.round(3),
-                    hide_index=True,
-                    width="stretch"
+                selection_freqs = np.linspace(
+                    0, max_frequency, 35
                 )
 
-                # 9. CSV 다운로드
-                split_csv = split_df.to_csv(
-                    index=False
-                ).encode("utf-8-sig")
-
-                st.download_button(
-                    label="Download Split Results",
-                    data=split_csv,
-                    file_name="Split_Segment_Results.csv",
-                    mime="text/csv",
-                    key=f"download_split_{file_id}"
+                fig_manual.add_trace(
+                    go.Scattergl(
+                        x=np.tile(
+                            selection_times,
+                            len(selection_freqs)
+                        ),
+                        y=np.repeat(
+                            selection_freqs,
+                            len(selection_times)
+                        ),
+                        mode="markers",
+                        marker=dict(
+                            size=8,
+                            color="rgba(255,255,255,0.01)"
+                        ),
+                        hoverinfo="skip",
+                        showlegend=False
+                    )
                 )
+
+                # 저장된 구간을 그래프에 표시
+                segment_colors = {
+                    1: "rgba(13,148,136,0.25)",
+                    2: "rgba(37,99,235,0.25)"
+                }
+
+                for seg_id, seg_range in saved_segments.items():
+                    seg_start, seg_end = seg_range
+
+                    fig_manual.add_vrect(
+                        x0=seg_start,
+                        x1=seg_end,
+                        fillcolor=segment_colors[seg_id],
+                        line_width=0,
+                        layer="above"
+                    )
+
+                
+                # =====================================
+                # Time Axis Grid Settings
+                # =====================================
+
+                
+                # =====================================
+                # X-axis: Fixed 0.05-second Intervals
+                # =====================================
+
+                fig_manual.update_layout(
+                    title="Select Two Syllable Regions",
+
+                    xaxis=dict(
+                        title="Time (seconds)",
+                        range=[crop_start, crop_end],
+
+                        # 0.05초 간격으로 눈금 고정
+                        tickmode="linear",
+                        tick0=0,
+                        dtick=0.05,
+                        tickformat=".2f",
+
+                        # 모든 눈금 라벨 표시
+                        tickangle=-45,
+                        automargin=True,
+
+                        # 세로 점선 표시
+                        showgrid=True,
+                        gridcolor="rgba(100,100,100,0.5)",
+                        gridwidth=1,
+                        griddash="dot",
+                        zeroline=False
+                    ),
+
+                    yaxis=dict(
+                        title="Frequency (Hz)",
+                        range=[0, max_frequency]
+                    ),
+
+                    height=450,
+                    dragmode="select",
+                    selectdirection="h"
+                )
+
+                fig_manual.update_layout(
+                    title="Select Two Syllable Regions",
+
+                    xaxis=dict(
+                        title="Time (seconds)",
+                        range=[crop_start, crop_end],
+                        tickmode="linear",
+                        tick0=0,
+                        dtick=time_interval,
+                        tickformat=".2f",
+                        showgrid=True,
+                        gridcolor="rgba(100,100,100,0.4)",
+                        gridwidth=1,
+                        griddash="dot",
+                        zeroline=False
+                    ),
+
+                    yaxis=dict(
+                        title="Frequency (Hz)",
+                        range=[0, max_frequency]
+                    ),
+
+                    height=400,
+                    dragmode="select",
+                    selectdirection="h"
+                )
+
+
+                # 3. 구간 선택 이벤트
+                selection_event = st.plotly_chart(
+                    fig_manual,
+                    width="stretch",
+                    key=(
+                        f"manual_selector_{region_id}_"
+                        f"{st.session_state[version_key]}"
+                    ),
+                    on_select="rerun",
+                    selection_mode="box"
+                )
+
+                # 4. 드래그 범위 읽기
+                selected_range = None
+
+                boxes = selection_event.selection.box
+
+                if boxes and "x" in boxes[-1]:
+                    x_values = boxes[-1]["x"]
+
+                    if len(x_values) == 2:
+                        selected_range = (
+                            float(min(x_values)),
+                            float(max(x_values))
+                        )
+
+                # 박스 정보가 없으면 포인트로 계산
+                if selected_range is None:
+                    points = selection_event.selection.points
+
+                    point_times = [
+                        float(p["x"])
+                        for p in points
+                        if "x" in p
+                    ]
+
+                    if len(point_times) >= 2:
+                        selected_range = (
+                            min(point_times),
+                            max(point_times)
+                        )
+
+                # 5. 선택 범위 검증
+                valid_selection = False
+
+                if selected_range is not None:
+                    selection_start = max(
+                        crop_start, selected_range[0]
+                    )
+
+                    selection_end = min(
+                        crop_end, selected_range[1]
+                    )
+
+                    valid_selection = (
+                        selection_end > selection_start
+                    )
+
+                # 6. 저장할 Segment 결정
+                next_segment = None
+
+                if 1 not in saved_segments:
+                    next_segment = 1
+                elif 2 not in saved_segments:
+                    next_segment = 2
+
+                if next_segment is not None:
+
+                    st.write(
+                        f"**Selecting Segment {next_segment}**"
+                    )
+
+                    if valid_selection:
+
+                        st.write(
+                            f"Selected: "
+                            f"{selection_start:.3f}s ~ "
+                            f"{selection_end:.3f}s"
+                        )
+
+                        # Segment 2는 Segment 1 이후에 위치
+                        if next_segment == 2:
+                            previous_end = saved_segments[1][1]
+
+                            if selection_start < previous_end:
+                                valid_selection = False
+                                st.warning(
+                                    "Segment 2는 Segment 1이 "
+                                    "끝난 뒤에 선택하세요."
+                                )
+
+
+                    if st.button(
+                        f"Save as Segment {next_segment}",
+                        disabled=not valid_selection,
+                        key=f"save_manual_{region_id}"
+                    ):
+
+                        saved_segments[next_segment] = (
+                            selection_start,
+                            selection_end
+                        )
+
+                        st.session_state[segments_key] = (
+                            saved_segments
+                        )
+
+                        # 다음 선택을 위해 그래프 상태 초기화
+                        st.session_state[version_key] += 1
+                        st.rerun()
+
+                else:
+                    st.success(
+                        "Segment 1과 Segment 2가 저장되었습니다."
+                    )
+
+                # 7. 선택 초기화
+                if st.button(
+                    "Reset Selected Segments",
+                    key=f"reset_manual_{region_id}"
+                ):
+                    st.session_state[segments_key] = {}
+                    st.session_state[version_key] += 1
+                    st.rerun()
+
+                # 8. 저장된 Segment별 오디오와 음향 분석
+                manual_results = []
+
+                if saved_segments:
+                    st.subheader("Listen to Selected Segments")
+
+                    audio_columns = st.columns(2)
+
+                    for seg_id in sorted(saved_segments):
+                        seg_start, seg_end = saved_segments[seg_id]
+
+                        start_sample = max(
+                            0, int(round(seg_start * sample_rate))
+                        )
+
+                        end_sample = min(
+                            sound.n_samples,
+                            int(round(seg_end * sample_rate))
+                        )
+
+                        seg_audio = sound.values[
+                            :, start_sample:end_sample
+                        ]
+
+                        with audio_columns[seg_id - 1]:
+                            st.write(f"**Segment {seg_id}**")
+
+                            st.caption(
+                                f"{seg_start:.3f}s ~ "
+                                f"{seg_end:.3f}s"
+                            )
+
+                            if seg_audio.shape[1] > 0:
+                                st.audio(
+                                    seg_audio,
+                                    sample_rate=int(sample_rate),
+                                    format="audio/wav"
+                                )
+
+                        # F0
+                        f0_mask = (
+                            (pitch_times >= seg_start)
+                            & (pitch_times < seg_end)
+                            & np.isfinite(pitch_values)
+                            & (pitch_values > 0)
+                        )
+
+                        seg_f0 = pitch_values[f0_mask]
+
+                        mean_f0 = (
+                            float(np.mean(seg_f0))
+                            if len(seg_f0) > 0
+                            else np.nan
+                        )
+
+                        # Intensity
+                        db_mask = (
+                            (intensity_times >= seg_start)
+                            & (intensity_times < seg_end)
+                            & np.isfinite(intensity_values)
+                        )
+
+                        seg_db = intensity_values[db_mask]
+
+                        mean_db = (
+                            float(np.mean(seg_db))
+                            if len(seg_db) > 0
+                            else np.nan
+                        )
+
+                        # 결과 저장
+                        manual_results.append({
+                            "Segment": f"Segment {seg_id}",
+                            "Start (s)": seg_start,
+                            "End (s)": seg_end,
+                            "Duration (ms)":
+                                (seg_end - seg_start) * 1000,
+                            "Mean F0 (Hz)": mean_f0,
+                            "Mean Intensity (dB)": mean_db
+                        })
+
+                # 9. 분석 결과 및 CSV 다운로드
+                if manual_results:
+
+                    manual_df = pd.DataFrame(
+                        manual_results
+                    )
+
+                    st.subheader("Split Segment Results")
+
+                    st.dataframe(
+                        manual_df.round(3),
+                        hide_index=True,
+                        width="stretch"
+                    )
+
+                    if len(manual_df) == 2:
+
+                        manual_csv = manual_df.to_csv(
+                            index=False
+                        ).encode("utf-8-sig")
+
+                        st.download_button(
+                            label="Download Split Results",
+                            data=manual_csv,
+                            file_name="Manual_Split_Results.csv",
+                            mime="text/csv",
+                            key=f"download_manual_{region_id}"
+                        )
+                    else:
+                        st.info(
+                            "Segment 2까지 선택하면 "
+                            "CSV를 다운로드할 수 있습니다."
+                        )
 
             else:
                 st.warning(
