@@ -806,7 +806,8 @@ if uploaded_file is not None:
                 st.subheader("Selected Region")
 
                 st.write(
-                    "스펙트로그램에서 두 음절 구간을 "
+                    "음절 개수를 선택한 후, "
+                    "스펙트로그램에서 각 음절 구간을 "
                     "순서대로 드래그하여 저장하세요."
                 )
 
@@ -815,6 +816,17 @@ if uploaded_file is not None:
                     f"{file_id}_"
                     f"{int(round(crop_start * 1000))}_"
                     f"{int(round(crop_end * 1000))}"
+                )
+
+                # =====================================
+                # Number of Syllables
+                # =====================================
+
+                segment_count = st.selectbox(
+                    "Number of Syllables",
+                    options=[2, 3, 4],
+                    index=0,
+                    key=f"segment_count_{region_id}"
                 )
 
                 segments_key = f"manual_segments_{region_id}"
@@ -827,6 +839,11 @@ if uploaded_file is not None:
                     st.session_state[version_key] = 0
 
                 saved_segments = st.session_state[segments_key]
+
+                # 음절 개수를 줄이면 초과하는 Segment 정리
+                for seg_id in list(saved_segments):
+                    if seg_id > segment_count:
+                        del saved_segments[seg_id]
 
                 # 2. 선택용 Spectrogram
                 fig_manual = go.Figure()
@@ -876,7 +893,9 @@ if uploaded_file is not None:
                 # 저장된 구간을 그래프에 표시
                 segment_colors = {
                     1: "rgba(13,148,136,0.25)",
-                    2: "rgba(37,99,235,0.25)"
+                    2: "rgba(37,99,235,0.25)",
+                    3: "rgba(168,85,247,0.25)",
+                    4: "rgba(249,115,22,0.25)"
                 }
 
                 for seg_id, seg_range in saved_segments.items():
@@ -926,7 +945,7 @@ if uploaded_file is not None:
                 # =====================================
 
                 fig_manual.update_layout(
-                    title="Select Two Syllable Regions",
+                    title="Select Syllable Regions",
 
                     xaxis=dict(
                         title="Time (seconds)",
@@ -1021,10 +1040,11 @@ if uploaded_file is not None:
                 # 6. 저장할 Segment 결정
                 next_segment = None
 
-                if 1 not in saved_segments:
-                    next_segment = 1
-                elif 2 not in saved_segments:
-                    next_segment = 2
+                for seg_id in range(1, segment_count + 1):
+                    if seg_id not in saved_segments:
+                        next_segment = seg_id
+                        break
+
 
                 if next_segment is not None:
 
@@ -1041,13 +1061,16 @@ if uploaded_file is not None:
                         )
 
                         # Segment 2는 Segment 1 이후에 위치
-                        if next_segment == 2:
-                            previous_end = saved_segments[1][1]
+                        if next_segment > 1:
+                            previous_end = saved_segments[
+                                next_segment - 1
+                            ][1]
 
                             if selection_start < previous_end:
                                 valid_selection = False
                                 st.warning(
-                                    "Segment 2는 Segment 1이 "
+                                    f"Segment {next_segment}는 "
+                                    f"Segment {next_segment - 1}이 "
                                     "끝난 뒤에 선택하세요."
                                 )
 
@@ -1123,7 +1146,7 @@ if uploaded_file is not None:
 
                 else:
                     st.success(
-                        "Segment 1과 Segment 2가 저장되었습니다."
+                        f"Segment 1~{segment_count}이 모두 저장되었습니다."                        
                     )
 
                 # 7. 선택 초기화
@@ -1159,7 +1182,7 @@ if uploaded_file is not None:
                             :, start_sample:end_sample
                         ]
 
-                        with audio_columns[seg_id - 1]:
+                        with audio_columns[(seg_id - 1) % 2]:
                             st.write(f"**Segment {seg_id}**")
 
                             st.caption(
@@ -1173,6 +1196,7 @@ if uploaded_file is not None:
                                     sample_rate=int(sample_rate),
                                     format="audio/wav"
                                 )
+
 
                         # F0
                         f0_mask = (
@@ -1231,7 +1255,7 @@ if uploaded_file is not None:
                         width="stretch"
                     )
 
-                    if len(manual_df) == 2:
+                    if len(manual_df) == segment_count:
 
                         manual_csv = manual_df.to_csv(
                             index=False
@@ -1246,8 +1270,8 @@ if uploaded_file is not None:
                         )
                     else:
                         st.info(
-                            "Segment 2까지 선택하면 "
-                            "CSV를 다운로드할 수 있습니다."
+                            f"Segment {segment_count}까지 선택하면 "
+                            "CSV를 다운로드할 수 있습니다."                            
                         )
 
             else:
