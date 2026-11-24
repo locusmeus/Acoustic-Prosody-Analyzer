@@ -804,12 +804,20 @@ if uploaded_file is not None:
 
                 st.subheader("Listen to Split Segments")
 
-                # 1. 분리된 두 구간의 시작 및 종료 시간
-                audio_regions = [
-                    ("Segment 1", crop_start, split_time),
-                    ("Segment 2", split_time, crop_end)
-                ]
+                # =====================================
+                # Dynamic Split Segment Audio Regions
+                # =====================================
 
+                # 위쪽 Spectrogram의 분할 위치를 그대로 사용
+                audio_regions = [
+                    (
+                        f"Segment {i + 1}",
+                        split_bounds[i],
+                        split_bounds[i + 1]
+                    )
+                    for i in range(segment_count)
+                ]
+                
                 # 2. 오디오 플레이어를 가로로 배치
                 audio_col1, audio_col2 = st.columns(2)
 
@@ -835,8 +843,8 @@ if uploaded_file is not None:
 
                     # 왼쪽과 오른쪽 컬럼에 배치
                     column = (
-                        audio_col1 if i == 0 else audio_col2
-                    )
+                        audio_col1 if i % 2 == 0 else audio_col2
+                    )                    
 
                     with column:
 
@@ -868,7 +876,8 @@ if uploaded_file is not None:
                 st.subheader("Selected Region")
 
                 st.write(
-                    "스펙트로그램에서 각 모음 구간을 "
+                    "음절 개수를 선택한 후, "
+                    "스펙트로그램에서 각 음절 구간을 "
                     "순서대로 드래그하여 저장하세요."
                 )
 
@@ -959,17 +968,21 @@ if uploaded_file is not None:
                         layer="above"
                     )
 
+               
                 # =====================================
-                # Split Position - Orange Dashed Line
+                # Split Position - Orange Dashed Lines
                 # =====================================
 
-                fig_manual.add_vline(
-                    x=split_time,
-                    line_color="orange",
-                    line_width=2,
-                    line_dash="dash"
-                )
-                
+                # 위쪽 Spectrogram과 동일한 분할선 표시
+                for split_time in split_times:
+
+                    fig_manual.add_vline(
+                        x=split_time,
+                        line_color="orange",
+                        line_width=2,
+                        line_dash="dash"
+                    )
+
                 # =====================================
                 # Selected Audio Region - Boundaries
                 # =====================================
