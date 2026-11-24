@@ -1063,6 +1063,56 @@ if uploaded_file is not None:
                                 )
 
 
+                    # =====================================
+                    # Listen to Preview Before Saving
+                    # =====================================
+
+                    if valid_selection:
+
+                        st.write("**Listen to Preview**")
+
+                        # 선택 시간을 오디오 샘플 위치로 변환
+                        preview_start_sample = max(
+                            0,
+                            int(round(selection_start * sample_rate))
+                        )
+
+                        preview_end_sample = min(
+                            sound.n_samples,
+                            int(round(selection_end * sample_rate))
+                        )
+
+                        # 원본 오디오에서 선택 구간 추출
+                        preview_audio = sound.values[
+                            :,
+                            preview_start_sample:preview_end_sample
+                        ]
+
+                        # 선택한 구간의 길이 표시
+                        preview_duration = (
+                            preview_audio.shape[1] / sample_rate
+                        )
+
+                        st.caption(
+                            f"Preview Duration: "
+                            f"{preview_duration:.3f} s"
+                        )
+
+                        # 저장 전 오디오 재생
+                        if preview_audio.shape[1] > 0:
+
+                            st.audio(
+                                preview_audio,
+                                sample_rate=int(sample_rate),
+                                format="audio/wav"
+                            )
+
+                        else:
+                            st.warning(
+                                "선택한 구간에 재생할 "
+                                "오디오 샘플이 없습니다."
+                            )
+
                     if st.button(
                         f"Save as Segment {next_segment}",
                         disabled=not valid_selection,
