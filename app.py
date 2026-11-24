@@ -876,8 +876,7 @@ if uploaded_file is not None:
                 st.subheader("Selected Region")
 
                 st.write(
-                    "음절 개수를 선택한 후, "
-                    "스펙트로그램에서 각 음절 구간을 "
+                    "스펙트로그램에서 각 모음 구간을 "
                     "순서대로 드래그하여 저장하세요."
                 )
 
