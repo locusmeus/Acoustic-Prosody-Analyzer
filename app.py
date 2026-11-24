@@ -658,81 +658,6 @@ if uploaded_file is not None:
 
                 
                 # =====================================
-                # STEP 18. Zoomed Spectrogram
-                # =====================================
-
-                # 1. 선택 시간 범위의 Spectrogram 데이터
-                crop_spec_mask = (
-                    (spec_times >= crop_start)
-                    & (spec_times <= crop_end)
-                )
-
-                if np.any(crop_spec_mask):
-
-                    cropped_spec_times = spec_times[
-                        crop_spec_mask
-                    ]
-
-                    cropped_spec_db = spec_db[
-                        :, crop_spec_mask
-                    ]
-
-                    # 2. 확대 Spectrogram 생성
-                    fig_crop = go.Figure()
-
-                    fig_crop.add_trace(
-                        go.Heatmap(
-                            x=cropped_spec_times,
-                            y=spec_freqs,
-                            z=cropped_spec_db,
-                            colorscale="Greys",
-                            reversescale=False,
-                            zmin=-60,
-                            zmax=0,
-                            colorbar=dict(
-                                title="Relative dB"
-                            )
-                        )
-                    )
-
-                    # 3. 분할 위치 표시
-                    fig_crop.add_vline(
-                        x=split_time,
-                        line_color="orange",
-                        line_width=2,
-                        line_dash="dash"
-                    )
-
-                    # 4. 확대 범위 지정
-                    fig_crop.update_layout(
-                        title="Zoomed Spectrogram with Split",
-                        xaxis_title="Time (seconds)",
-                        yaxis_title="Frequency (Hz)",
-                        xaxis_range=[
-                            crop_start,
-                            crop_end
-                        ],
-                        yaxis_range=[
-                            0,
-                            max_frequency
-                        ],
-                        height=400
-                    )
-
-                    # 5. 확대 그래프 출력
-                    st.plotly_chart(
-                        fig_crop,
-                        width="stretch",
-                        key=f"cropped_spectrogram_{file_id}"
-                    )
-
-                else:
-                    st.warning(
-                        "선택 구간에 표시할 "
-                        "Spectrogram 데이터가 없습니다."
-                    )
-
-                # =====================================
                 # STEP 17-2. Split Segment Audio Playback
                 # =====================================
 
@@ -955,7 +880,6 @@ if uploaded_file is not None:
                     dragmode="select",
                     selectdirection="h"
                 )
-
 
                 # 3. 구간 선택 이벤트
                 selection_event = st.plotly_chart(
