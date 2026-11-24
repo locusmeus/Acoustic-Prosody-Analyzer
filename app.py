@@ -636,24 +636,59 @@ if uploaded_file is not None:
                     f"~ {crop_end:.3f}s"
                 )
 
+
                 # =====================================
-                # Split Position Calculation
+                # Dynamic Split Position Calculation
                 # =====================================
 
-                # 슬라이더의 현재 값을 세션에서 가져오기
-                split_fraction = float(
-                    st.session_state.get(
-                        f"split_fraction_{file_id}",
-                        0.50
+                # 현재 Selected Region의 고유 ID
+                region_id = (
+                    f"{file_id}_"
+                    f"{int(round(crop_start * 1000))}_"
+                    f"{int(round(crop_end * 1000))}"
+                )
+
+                # 선택한 음절 개수 가져오기
+                segment_count_key = f"segment_count_{region_id}"
+
+                segment_count = int(
+                    st.session_state.get(segment_count_key, 2)
+                )
+
+                # 음절 개수에 따라 분할선 위치 가져오기
+                split_fractions = []
+
+                for split_index in range(1, segment_count):
+
+                    split_key = (
+                        f"split_position_{region_id}_"
+                        f"{segment_count}_{split_index}"
                     )
-                )
 
-                # 그래프 표시 전에 분할 위치 계산
-                split_time = (
+                    default_fraction = round(
+                        split_index / segment_count, 2
+                    )
+
+                    fraction = float(
+                        st.session_state.get(
+                            split_key,
+                            default_fraction
+                        )
+                    )
+
+                    split_fractions.append(fraction)
+
+                # 분할 위치를 시간(초)으로 변환
+                split_times = sorted([
                     crop_start
-                    + (crop_end - crop_start)
-                    * split_fraction
-                )
+                    + (crop_end - crop_start) * fraction
+                    for fraction in split_fractions
+                ])
+
+                # 모든 Segment의 시작 및 종료 경계
+                split_bounds = (
+                    [crop_start] + split_times + [crop_end]
+                )               
                 
                 # =====================================
                 # Full Spectrogram with Split Position
@@ -694,14 +729,15 @@ if uploaded_file is not None:
                     line_dash="dot"
                 )
 
-                # Split Position 표시
-                fig_split.add_vline(
-                    x=split_time,
-                    line_color="orange",
-                    line_width=2,
-                    line_dash="dash"
-                )
-
+                # 음절 개수에 따른 분할선 표시
+                for split_time in split_times:
+                    fig_split.add_vline(
+                        x=split_time,
+                        line_color="orange",
+                        line_width=2,
+                        line_dash="dash"
+                    )
+                
                 # 그래프 설정
                 fig_split.update_layout(
                     title="Spectrogram with Split Position",
@@ -718,23 +754,49 @@ if uploaded_file is not None:
                     width="stretch",
                     key=f"full_split_spectrogram_{file_id}"
                 )
+
+                # =====================================
+                # Number of Syllables and Split Sliders
+                # =====================================
+
+                # 음절 개수 선택
+                segment_count = st.selectbox(
+                    "Number of Syllables",
+                    options=[2, 3, 4],
+                    index=0,
+                    key=segment_count_key
+                )
+
+                # 음절 개수에 맞게 분할 위치 슬라이더 생성
+                for split_index in range(1, segment_count):
+
+                    split_key = (
+                        f"split_position_{region_id}_"
+                        f"{segment_count}_{split_index}"
+                    )
+
+                    st.slider(
+                        f"Split Position {split_index}",
+                        min_value=0.01,
+                        max_value=0.99,
+                        value=round(
+                            split_index / segment_count, 2
+                        ),
+                        step=0.01,
+                        key=split_key
+                    )
+
+                # 현재 분할 시간 출력
+                st.write("**Current Split Times**")
+
+                for split_index, split_time in enumerate(
+                    split_times, start=1
+                ):
+                    st.caption(
+                        f"Split {split_index}: "
+                        f"{split_time:.3f} s"
+                    )
                 
-                # =====================================
-                # Split Position Slider
-                # =====================================
-
-                split_fraction = st.slider(
-                    "Split Position",
-                    min_value=0.05,
-                    max_value=0.95,
-                    value=0.50,
-                    step=0.01,
-                    key=f"split_fraction_{file_id}"
-                )
-
-                st.write(
-                    f"Split Time: {split_time:.3f}s"
-                )
 
                 # =====================================
                 # STEP 17-2. Split Segment Audio Playback
@@ -816,17 +878,6 @@ if uploaded_file is not None:
                     f"{file_id}_"
                     f"{int(round(crop_start * 1000))}_"
                     f"{int(round(crop_end * 1000))}"
-                )
-
-                # =====================================
-                # Number of Syllables
-                # =====================================
-
-                segment_count = st.selectbox(
-                    "Number of Syllables",
-                    options=[2, 3, 4],
-                    index=0,
-                    key=f"segment_count_{region_id}"
                 )
 
                 segments_key = f"manual_segments_{region_id}"
