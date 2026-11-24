@@ -886,6 +886,16 @@ if uploaded_file is not None:
                         layer="above"
                     )
 
+                # =====================================
+                # Split Position - Orange Dashed Line
+                # =====================================
+
+                fig_manual.add_vline(
+                    x=split_time,
+                    line_color="orange",
+                    line_width=2,
+                    line_dash="dash"
+                )
                 
                 # =====================================
                 # Time Axis Grid Settings
