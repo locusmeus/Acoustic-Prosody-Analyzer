@@ -829,9 +829,9 @@ if uploaded_file is not None:
 
                 fig_manual.add_trace(
                     go.Heatmap(
-                        x=cropped_spec_times,
+                        x=spec_times,
                         y=spec_freqs,
-                        z=cropped_spec_db,
+                        z=spec_db,
                         colorscale="Greys",
                         reversescale=False,
                         zmin=-60,
@@ -840,9 +840,9 @@ if uploaded_file is not None:
                     )
                 )
 
-                # 드래그 선택을 위한 Scatter 포인트
-                selection_times = cropped_spec_times[
-                    ::max(1, len(cropped_spec_times) // 400)
+                # 전체 시간 범위에서 드래그 선택 지원
+                selection_times = spec_times[
+                    ::max(1, len(spec_times) // 400)
                 ]
 
                 selection_freqs = np.linspace(
@@ -898,10 +898,25 @@ if uploaded_file is not None:
                 )
                 
                 # =====================================
-                # Time Axis Grid Settings
+                # Selected Audio Region - Boundaries
                 # =====================================
 
-                
+                # 선택 구간 시작 위치
+                fig_manual.add_vline(
+                    x=crop_start,
+                    line_color="deepskyblue",
+                    line_width=2,
+                    line_dash="dot"
+                )
+
+                # 선택 구간 종료 위치
+                fig_manual.add_vline(
+                    x=crop_end,
+                    line_color="deepskyblue",
+                    line_width=2,
+                    line_dash="dot"
+                )
+
                 # =====================================
                 # X-axis: Fixed 0.05-second Intervals
                 # =====================================
@@ -911,7 +926,7 @@ if uploaded_file is not None:
 
                     xaxis=dict(
                         title="Time (seconds)",
-                        range=[crop_start, crop_end],
+                        range=[0, float(duration)],
 
                         # 0.05초 간격으로 눈금 고정
                         tickmode="linear",
@@ -937,35 +952,6 @@ if uploaded_file is not None:
                     ),
 
                     height=450,
-                    dragmode="select",
-                    selectdirection="h"
-                )
-
-                fig_manual.update_layout(
-                    title="Select Two Syllable Regions",
-
-                    xaxis=dict(
-                        title="Time (seconds)",
-                        range=[crop_start, crop_end],
-                        tickmode="linear",
-                        tick0=0,
-                        dtick=0.05,
-                        tickformat=".2f",
-                        tickangle=-45,
-                        automargin=True,
-                        showgrid=True,
-                        gridcolor="rgba(100,100,100,0.5)",
-                        gridwidth=1,
-                        griddash="dot",
-                        zeroline=False
-                    ),
-
-                    yaxis=dict(
-                        title="Frequency (Hz)",
-                        range=[0, max_frequency]
-                    ),
-
-                    height=400,
                     dragmode="select",
                     selectdirection="h"
                 )
