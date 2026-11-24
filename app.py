@@ -656,6 +656,69 @@ if uploaded_file is not None:
                     f"Split Time: {split_time:.3f}s"
                 )
 
+                # =====================================
+                # Full Spectrogram with Split Position
+                # =====================================
+
+                fig_split = go.Figure()
+
+                # 전체 오디오 Spectrogram
+                fig_split.add_trace(
+                    go.Heatmap(
+                        x=spec_times,
+                        y=spec_freqs,
+                        z=spec_db,
+                        colorscale="Greys",
+                        reversescale=False,
+                        zmin=-60,
+                        zmax=0,
+                        colorbar=dict(
+                            title="Relative dB"
+                        ),
+                        name="Spectrogram"
+                    )
+                )
+
+                # 선택 구간 시작 경계
+                fig_split.add_vline(
+                    x=crop_start,
+                    line_color="deepskyblue",
+                    line_width=2,
+                    line_dash="dot"
+                )
+
+                # 선택 구간 종료 경계
+                fig_split.add_vline(
+                    x=crop_end,
+                    line_color="deepskyblue",
+                    line_width=2,
+                    line_dash="dot"
+                )
+
+                # Split Position 표시
+                fig_split.add_vline(
+                    x=split_time,
+                    line_color="orange",
+                    line_width=2,
+                    line_dash="dash"
+                )
+
+                # 그래프 설정
+                fig_split.update_layout(
+                    title="Spectrogram with Split Position",
+                    xaxis_title="Time (seconds)",
+                    yaxis_title="Frequency (Hz)",
+                    xaxis_range=[0, float(duration)],
+                    yaxis_range=[0, max_frequency],
+                    height=450
+                )
+
+                # Spectrogram 출력
+                st.plotly_chart(
+                    fig_split,
+                    width="stretch",
+                    key=f"full_split_spectrogram_{file_id}"
+                )
                 
                 # =====================================
                 # STEP 17-2. Split Segment Audio Playback
