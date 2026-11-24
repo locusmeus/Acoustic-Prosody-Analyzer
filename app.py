@@ -636,26 +636,25 @@ if uploaded_file is not None:
                     f"~ {crop_end:.3f}s"
                 )
 
-                # 3. 구간을 나눌 위치 지정
-                split_fraction = st.slider(
-                    "Split Position",
-                    min_value=0.05,
-                    max_value=0.95,
-                    value=0.50,
-                    step=0.01,
-                    key=f"split_fraction_{file_id}"
+                # =====================================
+                # Split Position Calculation
+                # =====================================
+
+                # 슬라이더의 현재 값을 세션에서 가져오기
+                split_fraction = float(
+                    st.session_state.get(
+                        f"split_fraction_{file_id}",
+                        0.50
+                    )
                 )
 
+                # 그래프 표시 전에 분할 위치 계산
                 split_time = (
                     crop_start
                     + (crop_end - crop_start)
                     * split_fraction
                 )
-
-                st.write(
-                    f"Split Time: {split_time:.3f}s"
-                )
-
+                
                 # =====================================
                 # Full Spectrogram with Split Position
                 # =====================================
@@ -720,6 +719,23 @@ if uploaded_file is not None:
                     key=f"full_split_spectrogram_{file_id}"
                 )
                 
+                # =====================================
+                # Split Position Slider
+                # =====================================
+
+                split_fraction = st.slider(
+                    "Split Position",
+                    min_value=0.05,
+                    max_value=0.95,
+                    value=0.50,
+                    step=0.01,
+                    key=f"split_fraction_{file_id}"
+                )
+
+                st.write(
+                    f"Split Time: {split_time:.3f}s"
+                )
+
                 # =====================================
                 # STEP 17-2. Split Segment Audio Playback
                 # =====================================
